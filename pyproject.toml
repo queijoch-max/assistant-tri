@@ -1,0 +1,20 @@
+[project]
+name = "assistant-tri"
+version = "0.1.0"
+description = "Application web qui trie automatiquement ses demandes clients grâce à l'IA."
+readme = "README.md"
+authors = [
+    { name = "Charlotte", email = "queijo.ch@gmail.com" }
+]
+requires-python = ">=3.13"
+dependencies = [
+    "fastapi[standard]>=0.143.0",
+    "ollama>=0.6.3",
+    "pydantic-settings>=2.15.0",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.1.1",
+    "ruff>=0.17.0",
+]
