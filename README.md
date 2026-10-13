@@ -1,7 +1,7 @@
-# 🚲 Assistant IA de tri SAV — Cycles Mistral
+# Assistant IA de tri SAV — Cycles Mistral
 
-> 🚧 **Projet en cours de développement** 
-> Ce README est mis à jour à chaque étape terminée (voir la [feuille de route](#-feuille-de-route)).
+> **Projet en cours de développement** 
+> Ce README est mis à jour à chaque étape terminée (voir la [feuille de route](#feuille-de-route)).
 
 Application web qui **trie automatiquement les demandes clients** d'un service après-vente grâce à une IA **100 % locale et gratuite**, puis propose un **brouillon de réponse** que l'agent relit avant envoi.
 
@@ -62,14 +62,17 @@ Le reste de l'application dépend d'une **interface** (`AIProvider`), jamais d'u
 
 ## Feuille de route
 
+## Feuille de route
+
 - [x] **Cadrage** : cahier des charges, règles métier, critères de recette
 - [x] **Mise en place** : uv, FastAPI, ruff, Git
 - [x] **Contrats de données** : schémas Pydantic et tests
 - [x] **Configuration** par variables d'environnement (`pydantic-settings`)
 - [x] **Interface IA** `AIProvider` et `FakeProvider`
-- [ ] Appel au LLM local (`OllamaProvider`) : sortie JSON structurée, délai max, nouvelle tentative
-- [ ] Garde-fous métier : mots-clés d'alerte, masquage des données bancaires
-- [ ] Jeu de test (40 messages) et script d'évaluation `evaluate.py`
+- [x] **Appel au LLM local** (`OllamaProvider`) : sortie JSON structurée, délai maximum
+- [x] **Jeu de test** (40 messages annotés) et script d'évaluation `evaluate.py`
+- [ ] Garde-fous métier : mots-clés d'alerte, masquage des données bancaires, routage *(en cours)*
+- [ ] Robustesse : nouvelle tentative et mode dégradé si l'IA échoue
 - [ ] Génération des brouillons de réponse
 - [ ] Base de données SQLite
 - [ ] Formulaire client et tableau de bord SAV (Jinja2 + HTMX)
@@ -77,6 +80,23 @@ Le reste de l'application dépend d'une **interface** (`AIProvider`), jamais d'u
 - [ ] Statistiques de la semaine
 - [ ] Docker : lancement en une commande
 - [ ] Captures d'écran et démo GIF
+
+---
+
+## Résultats de l'IA
+
+Évaluation sur 40 messages annotés à la main (`uv run python -m scripts.evaluate`).
+Historique complet et analyse des erreurs : [`docs/evaluation.md`](docs/evaluation.md).
+
+| Indicateur | Baseline (qwen2.5:3b) | Cible |
+|---|---|---|
+| Bonne catégorie | 77,5 % | ≥ 85 % |
+| Bonne urgence | 60,0 % | — |
+| **Urgences critiques détectées** | **66,7 %** (4/6) | **100 %** |
+| Urgences sous-estimées | 6 | 0 |
+| Temps moyen par message | 5,9 s (CPU, sans GPU) | — |
+
+Prochaine étape : des garde-fous en code (mots-clés d'alerte, routage) pour atteindre 100 % de détection des urgences critiques.
 
 ---
 
@@ -110,15 +130,22 @@ uv run pytest -v
 ```
 assistant-tri/
 ├── app/
-│   ├── main.py            # application FastAPI
-│   ├── config.py          # réglages lus depuis .env
-│   ├── schemas.py         # contrats de données (Pydantic)
-│   └── services/
-│       └── ai_client.py   # interface AIProvider + FakeProvider
-├── tests/                 # tests pytest
+│ ├── main.py # application FastAPI
+│ ├── config.py # réglages lus depuis .env
+│ ├── schemas.py # contrats de données (Pydantic)
+│ └── services/
+│ └── ai_client.py # interface AIProvider, FakeProvider, OllamaProvider
+├── data/eval/
+│ ├── messages.jsonl # 40 messages de test annotés
+│ └── resultats/ # rapports d’évaluation horodatés
+├── scripts/
+│ ├── essai_ollama.py # essai rapide sur quelques messages
+│ └── evaluate.py # évaluation complète de l’IA
+├── tests/ # tests pytest
 ├── docs/
-│   └── cadrage.md         # cahier des charges
-├── .env.example           # modèle de configuration
+│ ├── cadrage.md # cahier des charges
+│ └── evaluation.md # journal des scores de l’IA
+├── .env.example # modèle de configuration
 └── pyproject.toml
 ```
 
