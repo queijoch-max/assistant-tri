@@ -8,6 +8,7 @@ Commande : `uv run python -m scripts.evaluate` · Rapports détaillés : `data/e
 | # | Date | Modèle | Changement | Catégorie | Urgence | Atelier | Rappel critiques | Sous-estimées | Temps moyen |
 |---|---|---|---|---|---|---|---|---|---|
 | 0 | 2026-10-13 | qwen2.5:3b | Baseline : prompt v2 | 77,5 % | 60,0 % | 77,5 % | 66,7 % (4/6) | 6 | 5,9 s |
+| 1 | 2026-10-13 | qwen2.5:3b | + garde-fous en code (mots-clés d'alerte, masquage carte, routage, 2 tentatives) | 77,5 % | 65,0 % | 77,5 % | 100 % (6/6) | 4 | 5,6 s |
 
 **Cibles du cahier des charges :** catégorie ≥ 85 % · rappel critiques = 100 %.
 
@@ -21,3 +22,11 @@ Commande : `uv run python -m scripts.evaluate` · Rapports détaillés : `data/e
 | Atelier inventé à partir d'un lieu hors réseau (vraie erreur de destination) | #40 | Idem |
 | Confusions batterie / panne et avant_achat / autre | #11, 17, 32, 36 | Prompt, ou modèle plus gros |
 | Un remerciement classé « réclamation » | #38 | Prompt |
+
+
+## Run 1 : effet des garde-fous
+
+- **Rappel critiques : 66,7 % → 100 %.** Les mots-clés ont rattrapé #1 (« brûlé ») et #4 (« fume », écrit en style SMS).
+- **Bonne destination : 97,5 %** grâce au routage en code. Seule erreur : #40, où l'IA invente `lyon8` pour « Villeurbanne ».
+- Aucun mot-clé n'a été ajouté pour s'adapter au jeu de test (pas de surapprentissage) : le #2 (« ne freinent presque plus ») reste détecté par l'IA seule.
+- Reste à traiter : l'IA met « normale » à presque tout (4 « haute » sous-estimées, 10 « basse » surestimées). Piste : le prompt.

@@ -37,6 +37,7 @@ EXEMPLES :
 La justification cite les mots du message qui expliquent l'urgence.
 confiance : nombre entre 0 et 1 (ex. 0.8). Réponds en français, uniquement avec le JSON."""
 
+
 class AIProvider(Protocol):
     def analyser(self, message: str) -> AnalyseIA: ...
 
@@ -80,7 +81,7 @@ class OllamaProvider:
                 {"role": "user", "content": f"<message>{message}</message>"},
             ],
             format=AnalyseIA.model_json_schema(),
-            options={"temperature": 0}
+            options={"temperature": 0},
         )
         return AnalyseIA.model_validate_json(reponse.message.content)
 

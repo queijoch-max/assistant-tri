@@ -88,15 +88,16 @@ Le reste de l'application dépend d'une **interface** (`AIProvider`), jamais d'u
 Évaluation sur 40 messages annotés à la main (`uv run python -m scripts.evaluate`).
 Historique complet et analyse des erreurs : [`docs/evaluation.md`](docs/evaluation.md).
 
-| Indicateur | Baseline (qwen2.5:3b) | Cible |
-|---|---|---|
-| Bonne catégorie | 77,5 % | ≥ 85 % |
-| Bonne urgence | 60,0 % | — |
-| **Urgences critiques détectées** | **66,7 %** (4/6) | **100 %** |
-| Urgences sous-estimées | 6 | 0 |
-| Temps moyen par message | 5,9 s (CPU, sans GPU) | — |
+| Indicateur | IA seule (qwen2.5:3b) | IA + garde-fous | Cible |
+|---|---|---|---|
+| Bonne catégorie | 77,5 % | 77,5 % | ≥ 85 % |
+| Bonne urgence | 60,0 % | 65,0 % | — |
+| **Urgences critiques détectées** | 66,7 % (4/6) | **100 % (6/6)** | **100 %** |
+| Urgences sous-estimées | 6 | 4 | 0 |
+| Bonne destination (atelier) | — | 97,5 % | — |
+| Temps moyen par message | 5,9 s | 5,6 s (CPU, sans GPU) | — |
 
-Prochaine étape : des garde-fous en code (mots-clés d'alerte, routage) pour atteindre 100 % de détection des urgences critiques.
+Les garde-fous en code (mots-clés d'alerte, routage, masquage des cartes) garantissent la détection des urgences critiques, y compris face à une tentative d'injection de prompt. Prochaine étape : améliorer le prompt pour mieux distinguer les urgences haute, normale et basse.
 
 ---
 
@@ -152,5 +153,3 @@ assistant-tri/
 ---
 
 **Charlotte Queijo** 
-
-<!-- Ajouter ici : lien LinkedIn, e-mail ou portfolio -->

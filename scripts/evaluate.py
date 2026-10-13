@@ -4,11 +4,13 @@ from datetime import datetime
 from pathlib import Path
 
 from app.config import settings
+from app.schemas import Categorie, CodeAtelier
 from app.services.ai_client import AIProvider, get_provider
+from app.services.triage import router, trier
 
 CHEMIN_MESSAGES = Path("data/eval/messages.jsonl")
 DOSSIER_RESULTATS = Path("data/eval/resultats")
-CHAMPS = ("categorie", "urgence", "atelier")
+CHAMPS = ("categorie", "urgence", "atelier", "destination")
 ORDRE_URGENCE = {"basse": 0, "normale": 1, "haute": 2, "critique": 3}
 
 
@@ -18,35 +20,41 @@ def charger_messages(chemin: Path) -> list[dict]:
         return [json.loads(ligne) for ligne in fichier if ligne.strip()]
 
 
+def destination_attendue(msg: dict) -> str:
+    """Atelier de destination déduit de l'annotation, avec les mêmes règles de routage."""
+    atelier = CodeAtelier(msg["atelier"]) if msg["atelier"] else None
+    return router(atelier, Categorie(msg["categorie"])).value
+
+
 def evaluer(provider: AIProvider, messages: list[dict]) -> list[dict]:
-    """Fait analyser chaque message et enregistre l'attendu et l'obtenu."""
+    """Fait trier chaque message (IA + garde-fous) et compare à l'annotation."""
     resultats = []
     for i, msg in enumerate(messages, start=1):
         print(f"[{i}/{len(messages)}] message {msg['id']}...", end="", flush=True)
         debut = time.perf_counter()
-        try:
-            analyse = provider.analyser(msg["message"])
-            atelier = analyse.atelier_suggere
-            obtenu = {
-                "categorie": analyse.categorie.value,
-                "urgence": analyse.urgence.value,
-                "atelier": atelier.value if atelier else None,
-            }
-            erreur = None
-        # Volontairement large : une réponse invalide ne doit pas arrêter l'évaluation.
-        except Exception as exc:  # noqa: BLE001
-            obtenu = None
-            erreur = f"{type(exc).__name__}: {exc}"
+        resultat = trier(msg["message"], provider)
         duree = time.perf_counter() - debut
         print(f" {duree:.1f} s")
 
+        atelier_cite = resultat.analyse.atelier_suggere if resultat.analyse else None
         resultats.append(
             {
                 "id": msg["id"],
                 "message": msg["message"],
-                "attendu": {champ: msg[champ] for champ in CHAMPS},
-                "obtenu": obtenu,
-                "erreur": erreur,
+                "attendu": {
+                    "categorie": msg["categorie"],
+                    "urgence": msg["urgence"],
+                    "atelier": msg["atelier"],
+                    "destination": destination_attendue(msg),
+                },
+                "obtenu": {
+                    "categorie": resultat.categorie.value,
+                    "urgence": resultat.urgence.value,
+                    "atelier": atelier_cite.value if atelier_cite else None,
+                    "destination": resultat.atelier_destination.value,
+                },
+                "alerte": resultat.alerte,
+                "erreur": resultat.erreur_ia,
                 "duree": duree,
             }
         )
@@ -77,10 +85,12 @@ def calculer_metriques(resultats: list[dict]) -> dict:
 
     return {
         "total": total,
-        "erreurs": total - len(valides),
+        "erreurs": sum(1 for r in resultats if r.get("erreur")),
+        "alertes": sum(1 for r in resultats if r.get("alerte")),
         "precision_categorie": nb_corrects("categorie") / total,
         "precision_urgence": nb_corrects("urgence") / total,
         "precision_atelier": nb_corrects("atelier") / total,
+        "precision_destination": nb_corrects("destination") / total,
         "rappel_critique": critiques_detectees / len(critiques) if critiques else 1.0,
         "sous_estimees": sum(1 for r in valides if ecart_urgence(r) < 0),
         "sur_estimees": sum(1 for r in valides if ecart_urgence(r) > 0),
@@ -91,30 +101,30 @@ def calculer_metriques(resultats: list[dict]) -> dict:
 def afficher_rapport(metriques: dict, resultats: list[dict], modele: str) -> None:
     m = metriques
     print("\n" + "=" * 60)
-    print(f"RAPPORT D'ÉVALUATION — {m['total']} messages — {modele}")
+    print(f"RAPPORT D'ÉVALUATION — {m['total']} messages — {modele} + garde-fous")
     print("=" * 60)
     print(f"Précision catégorie    : {m['precision_categorie']:6.1%}   (cible ≥ 85 %)")
     print(f"Précision urgence      : {m['precision_urgence']:6.1%}")
-    print(f"Précision atelier      : {m['precision_atelier']:6.1%}")
+    print(f"Atelier cité           : {m['precision_atelier']:6.1%}")
+    print(f"Bonne destination      : {m['precision_destination']:6.1%}")
     print(f"Rappel critiques       : {m['rappel_critique']:6.1%}   (cible 100 %)")
     print(f"Urgences sous-estimées : {m['sous_estimees']}   (dangereux)")
     print(f"Urgences surestimées   : {m['sur_estimees']}")
-    print(f"Erreurs techniques     : {m['erreurs']}")
+    print(f"Alertes mots-clés      : {m['alertes']}")
+    print(f"Erreurs de l'IA        : {m['erreurs']}   (mode dégradé)")
     print(f"Temps moyen            : {m['duree_moyenne']:.1f} s")
 
     print("\nDÉSACCORDS :")
     for r in resultats:
-        if r["obtenu"] is None:
-            print(f"\n#{r['id']} {r['message'][:70]}")
-            print(f"   ERREUR : {r['erreur']}")
-            continue
         differences = [c for c in CHAMPS if r["obtenu"][c] != r["attendu"][c]]
-        if differences:
+        if differences or r["erreur"]:
             print(f"\n#{r['id']} {r['message'][:70]}")
+            if r["erreur"]:
+                print(f"   ERREUR IA : {r['erreur']}")
             for champ in differences:
                 attendu = str(r["attendu"][champ])
                 print(
-                    f"   {champ:<10}: attendu {attendu:<12} obtenu {r['obtenu'][champ]}"
+                    f"   {champ:<11}: attendu {attendu:<12} obtenu {r['obtenu'][champ]}"
                 )
 
 

@@ -1,7 +1,8 @@
 import re
 import unicodedata
 
-from app.schemas import Categorie, CodeAtelier
+from app.schemas import Categorie, CodeAtelier, ResultatTriage, Urgence
+from app.services.ai_client import AIProvider
 
 # Mots-clés d'alerte du cadrage (section 9), écrits SANS accents ni majuscules :
 # le message est normalisé de la même façon avant la recherche.
@@ -59,6 +60,8 @@ REDIRECTION_REPARATION = {
 }
 CATEGORIES_REPARATION = {Categorie.PANNE, Categorie.BATTERIE, Categorie.GARANTIE}
 ATELIER_PAR_DEFAUT = CodeAtelier.LYON1
+NB_TENTATIVES = 2  # cahier des charges : une nouvelle tentative en cas d'échec
+SEUIL_CONFIANCE = 0.6  # en dessous : badge « à vérifier »
 
 
 def normaliser(texte: str) -> str:
@@ -85,3 +88,48 @@ def router(atelier_cite: CodeAtelier | None, categorie: Categorie) -> CodeAtelie
     if categorie in CATEGORIES_REPARATION:
         return REDIRECTION_REPARATION.get(atelier_cite, atelier_cite)
     return atelier_cite
+
+
+def trier(message: str, provider: AIProvider) -> ResultatTriage:
+    """Analyse un message avec l'IA, puis applique les garde-fous métier.
+
+    Ne lève jamais d'exception : une demande client ne doit jamais être perdue.
+    """
+    alerte = detecter_alerte(message)
+    texte_pour_ia = masquer_cartes(message)
+
+    analyse = None
+    erreur_ia = None
+    for _ in range(NB_TENTATIVES):
+        try:
+            analyse = provider.analyser(texte_pour_ia)
+            break
+        # Volontairement large : quelle que soit la panne de l'IA (JSON invalide,
+        # Ollama éteint, délai dépassé), on passe en mode dégradé.
+        except Exception as exc:  # noqa: BLE001
+            erreur_ia = f"{type(exc).__name__}: {exc}"
+
+    if analyse is None:
+        # Mode dégradé : valeurs prudentes et vérification humaine obligatoire.
+        categorie, urgence, atelier_cite = Categorie.AUTRE, Urgence.NORMALE, None
+        a_verifier = True
+    else:
+        categorie, urgence = analyse.categorie, analyse.urgence
+        atelier_cite = analyse.atelier_suggere
+        a_verifier = analyse.confiance < SEUIL_CONFIANCE
+        erreur_ia = None  # une tentative a réussi
+
+    # Garde-fou de sécurité : un mot-clé de danger force l'urgence critique,
+    # quoi que l'IA ait répondu.
+    if alerte:
+        urgence = Urgence.CRITIQUE
+
+    return ResultatTriage(
+        analyse=analyse,
+        categorie=categorie,
+        urgence=urgence,
+        atelier_destination=router(atelier_cite, categorie),
+        alerte=alerte,
+        a_verifier=a_verifier,
+        erreur_ia=erreur_ia,
+    )

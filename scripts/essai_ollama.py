@@ -17,5 +17,7 @@ for message in MESSAGE:
     analyse = provider.analyser(message)
     duree = time.perf_counter() - debut
     print(f"\n[{duree:.1f} s] {message}")
-    print(f"  → {analyse.categorie} / {analyse.urgence} / atelier={analyse.atelier_suggere}")
+    print(
+        f"  → {analyse.categorie} / {analyse.urgence} / atelier={analyse.atelier_suggere}"
+    )
     print(f"  → {analyse.justification}")

@@ -73,3 +73,18 @@ class AnalyseIA(BaseModel):
         le=1,
         description="Confiance dans la classification, entre 0 et 1",
     )
+
+
+# ============================================================================
+# 4. LE RÉSULTAT DU TRIAGE (IA + garde-fous)
+# ============================================================================
+class ResultatTriage(BaseModel):
+    """Décision finale : la proposition de l'IA corrigée par les règles métier."""
+
+    analyse: AnalyseIA | None  # proposition brute de l'IA (None si l'IA a échoué)
+    categorie: Categorie
+    urgence: Urgence
+    atelier_destination: CodeAtelier
+    alerte: str | None  # mot-clé de danger trouvé, s'il y en a un
+    a_verifier: bool  # True si un humain doit vérifier en priorité
+    erreur_ia: str | None = None
