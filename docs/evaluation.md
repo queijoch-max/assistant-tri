@@ -30,3 +30,23 @@ Commande : `uv run python -m scripts.evaluate` · Rapports détaillés : `data/e
 - **Bonne destination : 97,5 %** grâce au routage en code. Seule erreur : #40, où l'IA invente `lyon8` pour « Villeurbanne ».
 - Aucun mot-clé n'a été ajouté pour s'adapter au jeu de test (pas de surapprentissage) : le #2 (« ne freinent presque plus ») reste détecté par l'IA seule.
 - Reste à traiter : l'IA met « normale » à presque tout (4 « haute » sous-estimées, 10 « basse » surestimées). Piste : le prompt.
+
+
+## Brouillons de réponse (phrase écrite par l'IA)
+
+Évaluation : `uv run python -m scripts.evaluate_brouillons` sur les 40 messages · contrôles automatiques + relecture manuelle (`data/eval/brouillons/*_notation.md`).
+
+| # | Date | Modèle | Changement | Conformes (auto) | Vraiment bonnes (relecture) | Temps moyen |
+|---|---|---|---|---|---|---|
+| B0 | 2026-10-15 | qwen2.5:3b | Prompt v2 (avec exemples) | 9/40 (22 %) | ≈ 5/40 | 2,2 s |
+| B1 | 2026-10-15 | qwen2.5:3b | Prompt v3 : « nous », début de phrase imposé, sans exemples | 27/40 (68 %) | ≈ 15/40 | 2,5 s |
+| B2 | 2026-10-15 | qwen2.5:7b | Prompt v3 | 33/40 (82 %) | ≈ 24/40 | 6,1 s |
+
+**Enseignements**
+- Les premiers contrôles automatiques annonçaient 85 % de phrases conformes alors que la relecture en trouvait très peu de bonnes : une métrique doit être confrontée à une lecture humaine.
+- Les exemples du prompt étaient recopiés par le petit modèle (« facture », « signalé ») : les supprimer et imposer le début de phrase a été plus efficace.
+- Le 7B est plus fluide mais **invente des faits** (atelier « fermé aujourd'hui », « pièce disponible », « sous garantie ») : prochain chantier.
+
+**Prochaines pistes**
+- Contrôles à renforcer : affirmations factuelles (« est fermé », « disponible », « sous garantie »), « veuillez », « sera », « recevrez ».
+- Corriger le faux positif « sujet ajouté » quand le client écrit en style SMS (« batri »).

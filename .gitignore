@@ -12,3 +12,7 @@ wheels/
 # Secrets et données locales
 .env
 *.db
+
+# Rapports d'évaluation en mode fake (sans intérêt) data/eval/resultats/*fake.jsonS
+
+data/eval/brouillons/*fake*

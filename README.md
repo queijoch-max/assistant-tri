@@ -1,6 +1,6 @@
 # Assistant IA de tri SAV — Cycles Mistral
 
-> **Projet en cours de développement** 
+> **Projet en cours de développement**
 > Ce README est mis à jour à chaque étape terminée (voir la [feuille de route](#feuille-de-route)).
 
 Application web qui **trie automatiquement les demandes clients** d'un service après-vente grâce à une IA **100 % locale et gratuite**, puis propose un **brouillon de réponse** que l'agent relit avant envoi.
@@ -9,7 +9,7 @@ Application web qui **trie automatiquement les demandes clients** d'un service a
 
 ---
 
-##  Le problème métier
+## Le problème métier
 
 *Cycles Mistral* est un réseau fictif de **6 ateliers de vélos électriques à Lyon**.
 
@@ -32,7 +32,7 @@ Le cahier des charges complet (périmètre, user stories MoSCoW, règles métier
 - **Garde-fous** : mots-clés de sécurité qui forcent l'urgence critique, masquage des numéros de carte avant l'appel à l'IA, protection contre l'injection de prompt
 - **Tableau de bord SAV** trié par urgence, avec filtres, recherche et badges de couleur
 - **Correction humaine** des propositions de l'IA, avec mesure du taux de correction
-- **Brouillon de réponse** généré par l'IA, modifiable avant envoi
+- **Brouillon de réponse** construit par le code autour d'une phrase personnalisée écrite par l'IA, modifiable avant envoi
 - **Évaluation chiffrée** de l'IA sur un jeu de 40 messages annotés à la main
 
 ---
@@ -45,22 +45,26 @@ Le cahier des charges complet (périmètre, user stories MoSCoW, règles métier
 | Projet | uv + ruff | Dépendances verrouillées, code formaté et vérifié |
 | API web | FastAPI | Typage, validation, documentation automatique |
 | Données | Pydantic v2 | Contrats de données partagés entre l'API et l'IA |
-| IA | Ollama + `qwen2.5:3b` | Gratuit, local : **les données clients ne quittent pas la machine** (RGPD) |
+| IA | Ollama : `qwen2.5:3b` (classement) et `qwen2.5:7b` (rédaction) | Gratuit, local : **les données clients ne quittent pas la machine** (RGPD) |
 | Tests | pytest | |
 | *À venir* | SQLite + SQLAlchemy, Jinja2 + HTMX, Docker | |
 
 ### Architecture de l'IA
 
 ```
-message client ──► triage (garde-fous) ──► AIProvider ──┬──► OllamaProvider  (vrai LLM local)
-                                                        └──► FakeProvider    (tests et démo, sans IA)
+                      ┌─► detecter_alerte()   mot de danger → urgence critique forcée
+message client ──► trier() ──► masquer_cartes() ──► AIProvider.analyser()
+                      └─► router()             atelier de destination (règles métier)
+
+brouillon ──► Bonjour + [phrase écrite par l'IA] + consigne de sécurité + suivi + signature
+               └── écrit par le code ──┘                └────── écrit par le code ──────┘
 ```
 
-Le reste de l'application dépend d'une **interface** (`AIProvider`), jamais d'un modèle précis. On peut donc lancer les tests en quelques millisecondes, faire une démo sans télécharger de modèle, ou changer d'IA en écrivant une seule classe.
+- Le reste de l'application dépend d'une **interface** (`AIProvider`), jamais d'un modèle précis : tests en quelques millisecondes avec un `FakeProvider`, démo sans télécharger de modèle, changement d'IA en écrivant une seule classe.
+- **L'IA ne fait que ce que le code ne sait pas faire** (comprendre le sens d'un message, reformuler avec empathie). Tout ce qui est certain (sécurité, routage, structure de la réponse) est écrit en Python, donc impossible à contourner par une injection de prompt.
+- **Aucune demande n'est perdue** : si l'IA échoue deux fois, la demande passe en mode dégradé et un agent la vérifie.
 
 ---
-
-## Feuille de route
 
 ## Feuille de route
 
@@ -71,9 +75,10 @@ Le reste de l'application dépend d'une **interface** (`AIProvider`), jamais d'u
 - [x] **Interface IA** `AIProvider` et `FakeProvider`
 - [x] **Appel au LLM local** (`OllamaProvider`) : sortie JSON structurée, délai maximum
 - [x] **Jeu de test** (40 messages annotés) et script d'évaluation `evaluate.py`
-- [ ] Garde-fous métier : mots-clés d'alerte, masquage des données bancaires, routage *(en cours)*
-- [ ] Robustesse : nouvelle tentative et mode dégradé si l'IA échoue
-- [ ] Génération des brouillons de réponse
+- [x] **Garde-fous métier** : mots-clés d'alerte, masquage des données bancaires, routage
+- [x] **Robustesse** : nouvelle tentative et mode dégradé si l'IA échoue
+- [x] **Brouillons de réponse** : gabarit + phrase IA, contrôles, évaluation dédiée
+- [ ] Contrôles contre les faits inventés dans les brouillons *(en cours)*
 - [ ] Base de données SQLite
 - [ ] Formulaire client et tableau de bord SAV (Jinja2 + HTMX)
 - [ ] Authentification des agents
@@ -85,8 +90,11 @@ Le reste de l'application dépend d'une **interface** (`AIProvider`), jamais d'u
 
 ## Résultats de l'IA
 
-Évaluation sur 40 messages annotés à la main (`uv run python -m scripts.evaluate`).
 Historique complet et analyse des erreurs : [`docs/evaluation.md`](docs/evaluation.md).
+
+### Classement des demandes
+
+Évaluation sur 40 messages annotés à la main (`uv run python -m scripts.evaluate`).
 
 | Indicateur | IA seule (qwen2.5:3b) | IA + garde-fous | Cible |
 |---|---|---|---|
@@ -97,7 +105,19 @@ Historique complet et analyse des erreurs : [`docs/evaluation.md`](docs/evaluati
 | Bonne destination (atelier) | — | 97,5 % | — |
 | Temps moyen par message | 5,9 s | 5,6 s (CPU, sans GPU) | — |
 
-Les garde-fous en code (mots-clés d'alerte, routage, masquage des cartes) garantissent la détection des urgences critiques, y compris face à une tentative d'injection de prompt. Prochaine étape : améliorer le prompt pour mieux distinguer les urgences haute, normale et basse.
+Les garde-fous en code garantissent la détection des urgences critiques, y compris face à une tentative d'injection de prompt.
+
+### Brouillons de réponse
+
+Évaluation de la phrase écrite par l'IA sur les mêmes 40 messages (`uv run python -m scripts.evaluate_brouillons`) : contrôles automatiques **et** relecture humaine.
+
+| Version | Conformes (contrôles auto) | Vraiment bonnes (relecture) | Temps moyen |
+|---|---|---|---|
+| qwen2.5:3b, prompt v2 | 22 % | ≈ 5/40 | 2,2 s |
+| qwen2.5:3b, prompt v3 | 68 % | ≈ 15/40 | 2,5 s |
+| **qwen2.5:7b, prompt v3** | **82 %** | **≈ 24/40** | 6,1 s |
+
+Un enseignement clé : une première version des contrôles automatiques annonçait 85 % de phrases conformes alors que la relecture en trouvait très peu de bonnes. **Une métrique doit toujours être confrontée à une lecture humaine.** Prochaine étape : détecter les faits inventés (« atelier fermé aujourd'hui », « pièce disponible »…).
 
 ---
 
@@ -112,16 +132,24 @@ uv sync
 # 2. Créer la configuration locale
 cp .env.example .env        # Windows : copy .env.example .env
 
-# 3. Lancer l'API
+# 3. (Optionnel) Télécharger les modèles d'IA locaux
+ollama pull qwen2.5:3b
+ollama pull qwen2.5:7b
+
+# 4. Lancer l'API
 uv run fastapi dev app/main.py
 ```
 
 Puis ouvrir http://127.0.0.1:8000/docs pour la documentation interactive.
 
-**Lancer les tests :**
+Sans Ollama, mettre `AI_PROVIDER=fake` dans `.env` : l'application fonctionne avec des réponses simulées.
+
+**Lancer les tests et les évaluations :**
 
 ```bash
 uv run pytest -v
+uv run python -m scripts.evaluate              # classement des 40 messages
+uv run python -m scripts.evaluate_brouillons   # qualité des brouillons
 ```
 
 ---
@@ -131,25 +159,30 @@ uv run pytest -v
 ```
 assistant-tri/
 ├── app/
-│ ├── main.py # application FastAPI
-│ ├── config.py # réglages lus depuis .env
-│ ├── schemas.py # contrats de données (Pydantic)
-│ └── services/
-│ └── ai_client.py # interface AIProvider, FakeProvider, OllamaProvider
+│   ├── main.py                  # application FastAPI
+│   ├── config.py                # réglages lus depuis .env
+│   ├── schemas.py               # contrats de données (Pydantic)
+│   └── services/
+│       ├── ai_client.py         # AIProvider, FakeProvider, OllamaProvider, prompts
+│       ├── triage.py            # IA + garde-fous : alertes, masquage, routage
+│       └── brouillons.py        # brouillons de réponse et leurs contrôles
 ├── data/eval/
-│ ├── messages.jsonl # 40 messages de test annotés
-│ └── resultats/ # rapports d’évaluation horodatés
+│   ├── messages.jsonl           # 40 messages de test annotés
+│   ├── resultats/               # rapports d'évaluation du classement
+│   └── brouillons/              # rapports et grilles de notation des brouillons
 ├── scripts/
-│ ├── essai_ollama.py # essai rapide sur quelques messages
-│ └── evaluate.py # évaluation complète de l’IA
-├── tests/ # tests pytest
+│   ├── essai_ollama.py          # essai rapide du classement
+│   ├── essai_brouillon.py       # essai rapide des brouillons
+│   ├── evaluate.py              # évaluation du classement
+│   └── evaluate_brouillons.py   # évaluation des brouillons
+├── tests/                       # tests pytest
 ├── docs/
-│ ├── cadrage.md # cahier des charges
-│ └── evaluation.md # journal des scores de l’IA
-├── .env.example # modèle de configuration
+│   ├── cadrage.md               # cahier des charges
+│   └── evaluation.md            # journal des scores de l'IA
+├── .env.example                 # modèle de configuration
 └── pyproject.toml
 ```
 
 ---
 
-**Charlotte Queijo** 
+**Charlotte Queijo**
