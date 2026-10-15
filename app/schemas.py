@@ -88,3 +88,13 @@ class ResultatTriage(BaseModel):
     alerte: str | None  # mot-clé de danger trouvé, s'il y en a un
     a_verifier: bool  # True si un humain doit vérifier en priorité
     erreur_ia: str | None = None
+
+
+# ============================================================================
+# 5. LE BROUILLON DE REPONSE (F8)
+# ============================================================================
+class Brouillon(BaseModel):
+    """Brouillon proposé à l'agent, avec les points qu'il doit vérifier."""
+
+    texte: str
+    alertes: list[str] = Field(default_factory=list)
